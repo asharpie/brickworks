@@ -102,17 +102,25 @@
       });
 
       if (highlightIds.has(b._i ?? b.id)) {
-        // Add a glowing outline around highlighted bricks
+        // Add a glowing outline around highlighted bricks.
+        //
+        // IMPORTANT: collect the target meshes into an array FIRST, then add
+        // the outlines after traversal finishes. If we call `o.add(outline)`
+        // from inside traverse(), Three.js will visit the newly-added outline
+        // (which is itself a Mesh with geometry), add another outline to it,
+        // and recurse until the call stack overflows.
         const outlineMat = new THREE.MeshBasicMaterial({
           color: 0xffc72c, side: THREE.BackSide, transparent: true, opacity: 0.7,
         });
+        const targets = [];
         mesh.traverse(o => {
-          if (o.isMesh && o.geometry) {
-            const outline = new THREE.Mesh(o.geometry, outlineMat);
-            outline.scale.setScalar(1.08);
-            o.add(outline);
-          }
+          if (o.isMesh && o.geometry) targets.push(o);
         });
+        for (const o of targets) {
+          const outline = new THREE.Mesh(o.geometry, outlineMat);
+          outline.scale.setScalar(1.08);
+          o.add(outline);
+        }
         highlightMeshes.push(mesh);
       }
       group.add(mesh);

@@ -2,10 +2,6 @@
   "version": 2,
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.js" },
-    { "source": "/browse", "destination": "/browse.html" },
-    { "source": "/builder", "destination": "/builder.html" },
-    { "source": "/creation", "destination": "/creation.html" },
-    { "source": "/my-creations", "destination": "/my-creations.html" }
+    { "source": "/api/(.*)", "destination": "/api" }
   ]
 }
