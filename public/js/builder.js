@@ -225,6 +225,9 @@
   // -------- raycasting --------
   const raycaster = new THREE.Raycaster();
   const mouseVec = new THREE.Vector2();
+  const _tmpPlane = new THREE.Plane();
+  const _tmpVec3  = new THREE.Vector3();
+  const _planeNormal = new THREE.Vector3(0, 1, 0);
 
   function screenToPlacement(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -239,8 +242,15 @@
     const hits = raycaster.intersectObjects(targets, true);
     if (hits.length === 0) return null;
 
-    // Find first hit that's not on the ghost.
-    const hit = hits[0];
+    // Prefer a hit with a mostly-upward-facing normal (a flat top surface).
+    // The stud cylinders are 20-sided approximations, and when the ray skims
+    // their curved sides the hit point quantizes to facet boundaries — that
+    // can make the ghost visibly skip studs. Flat-top hits are always smooth.
+    let hit = hits[0];
+    for (const h of hits) {
+      if (h.face && h.face.normal && h.face.normal.y > 0.9) { hit = h; break; }
+    }
+
     // Determine the brick we're hitting (walking up the parent chain).
     let hitBrickId = null;
     let hitObj = hit.object;
@@ -255,9 +265,16 @@
     const brick = BRICK_MAP[state.selectedType];
     const { w, d } = footprint(brick, state.rot);
 
+    // Re-project the mouse ray onto a perfectly flat horizontal plane at the
+    // hit's y. This gives continuous, smooth hp.x/hp.z as the cursor moves —
+    // without this, stud cylinders can bias the hit point toward their centers
+    // and cause the ghost to snap in 2-stud increments instead of 1.
+    _tmpPlane.setFromNormalAndCoplanarPoint(_planeNormal, hit.point);
+    const smooth = raycaster.ray.intersectPlane(_tmpPlane, _tmpVec3);
+    const hp = smooth || hit.point;
+
     // Snap stud coords: compute the stud the hit point lies on, then
     // subtract half the footprint so the brick is centered on the cursor.
-    const hp = hit.point;
     const studX = Math.round(hp.x / STUD - w / 2);
     const studZ = Math.round(hp.z / STUD - d / 2);
 
@@ -265,11 +282,7 @@
     let yPlates;
     if (hit.object === baseplate) {
       yPlates = 0;
-    } else if (hit.face && Math.abs(hit.face.normal.y - 1) < 0.3) {
-      // Stacking on top of a brick — use the footprint max top height.
-      yPlates = highestTopUnderFootprint(occupancy(brick, state.rot, studX, studZ));
     } else {
-      // Side hit — place at the ground for that footprint.
       yPlates = highestTopUnderFootprint(occupancy(brick, state.rot, studX, studZ));
     }
 
