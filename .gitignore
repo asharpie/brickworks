@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+.vercel
+.DS_Store
+*.log
+npm-debug.log*
+
+# The old local-SQLite backend has been replaced by api/ + lib/ + scripts/.
+# These files are left in place so you can reference the old code, but they
+# are not used in production and should not be deployed. Delete the
+# server/ directory whenever you're ready.
+server/

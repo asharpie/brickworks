@@ -1,0 +1,21 @@
+{
+  "name": "brickworks",
+  "version": "1.0.0",
+  "description": "Brickworks — a 3D LEGO builder website with instruction generation and a community gallery.",
+  "private": true,
+  "scripts": {
+    "dev": "node api/index.js",
+    "start": "node api/index.js",
+    "seed": "node scripts/seed.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

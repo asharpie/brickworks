@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Brickworks — Browse</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="brand"><span class="brand-mark"></span> Brickworks</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/browse" class="active">Browse</a>
+      <a href="/builder">Builder</a>
+      <a href="/my-creations">My Creations</a>
+      <span class="user-chip" id="user-chip"></span>
+    </nav>
+  </header>
+
+  <div class="container">
+    <h1>Browse Creations</h1>
+
+    <div class="browse-head">
+      <div class="searchbox">
+        <span>🔍</span>
+        <input id="search-input" type="text" placeholder="Search creations (e.g. batmobile, dog, castle)…" />
+      </div>
+      <select class="sort-select" id="sort-select">
+        <option value="popular">Most popular</option>
+        <option value="newest">Newest</option>
+      </select>
+    </div>
+
+    <div id="result-meta" style="color:var(--text-dim);margin-bottom:14px;"></div>
+    <div class="grid" id="browse-grid">
+      <div class="loading">Loading…</div>
+    </div>
+  </div>
+
+  <script src="/js/user.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/browse.js"></script>
+</body>
+</html>

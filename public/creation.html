@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Brickworks — Creation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="brand"><span class="brand-mark"></span> Brickworks</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/browse">Browse</a>
+      <a href="/builder">Builder</a>
+      <a href="/my-creations">My Creations</a>
+      <span class="user-chip" id="user-chip"></span>
+    </nav>
+  </header>
+
+  <div class="container">
+    <div class="creation-layout">
+      <div class="viewer">
+        <canvas id="viewer-canvas" style="width:100%;height:100%;display:block;"></canvas>
+        <div class="viewer-hint">Drag to rotate · Scroll to zoom</div>
+      </div>
+
+      <aside class="sidecard" id="meta-card">
+        <div class="loading">Loading…</div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/js/bricks.js"></script>
+  <script src="/js/viewer.js"></script>
+  <script src="/js/user.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/instructions.js"></script>
+  <script src="/js/creation.js"></script>
+</body>
+</html>

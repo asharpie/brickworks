@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Brickworks — Builder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="brand"><span class="brand-mark"></span> Brickworks</a>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/browse">Browse</a>
+      <a href="/builder" class="active">Builder</a>
+      <a href="/my-creations">My Creations</a>
+      <span class="user-chip" id="user-chip"></span>
+    </nav>
+  </header>
+
+  <div class="builder-root">
+    <!-- Left: brick picker -->
+    <aside class="builder-panel">
+      <div class="panel-section">
+        <h4>Bricks</h4>
+        <div class="brick-categories" id="brick-categories"></div>
+        <div class="brick-list" id="brick-list"></div>
+      </div>
+      <div class="panel-section">
+        <h4>Color</h4>
+        <div class="color-swatches" id="color-swatches"></div>
+      </div>
+      <div class="panel-section">
+        <h4>Tool</h4>
+        <div class="tool-buttons">
+          <button class="tool-btn active" data-tool="place">Place</button>
+          <button class="tool-btn" data-tool="paint">Paint</button>
+          <button class="tool-btn" data-tool="rotate">Rotate</button>
+          <button class="tool-btn" data-tool="erase">Erase</button>
+        </div>
+      </div>
+      <div class="panel-section">
+        <h4>Rotation</h4>
+        <div class="tool-buttons">
+          <button class="tool-btn active" data-rot="0">0°</button>
+          <button class="tool-btn" data-rot="1">90°</button>
+          <button class="tool-btn" data-rot="2">180°</button>
+          <button class="tool-btn" data-rot="3">270°</button>
+        </div>
+      </div>
+      <div class="panel-section">
+        <h4>History</h4>
+        <div class="tool-buttons">
+          <button class="tool-btn" id="undo-btn">Undo</button>
+          <button class="tool-btn" id="redo-btn">Redo</button>
+        </div>
+      </div>
+      <div class="panel-section">
+        <h4>Layer Visibility</h4>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">Show up to layer:</div>
+        <input type="range" id="layer-slider" min="0" max="30" value="30" style="width:100%" />
+        <div style="font-size:11px;color:var(--text-dim);text-align:right;" id="layer-label">All</div>
+      </div>
+    </aside>
+
+    <!-- Center: 3D stage -->
+    <main class="builder-stage">
+      <canvas id="stage-canvas"></canvas>
+      <div class="stage-toolbar">
+        <button id="view-reset" title="Reset view">Reset View</button>
+        <div class="divider"></div>
+        <button id="view-top" title="Top-down">Top</button>
+        <button id="view-iso" title="Isometric">Iso</button>
+        <button id="view-front" title="Front">Front</button>
+        <div class="divider"></div>
+        <button id="toggle-grid" class="active">Grid</button>
+      </div>
+      <div class="status-bar">
+        <div class="help">Click to place · R to rotate · Right-drag to orbit · Scroll to zoom · Shift+click to delete</div>
+        <div class="stats" id="brick-count">0 bricks</div>
+      </div>
+    </main>
+
+    <!-- Right: save/export -->
+    <aside class="builder-panel right">
+      <div class="panel-section">
+        <h4>Creation</h4>
+        <input type="text" class="meta-field" id="name-field" placeholder="Name (e.g. Red Racecar)" maxlength="120" />
+        <textarea class="meta-field" id="desc-field" placeholder="Describe your build…" maxlength="2000"></textarea>
+      </div>
+      <div class="panel-section">
+        <h4>Actions</h4>
+        <div class="actions-stack">
+          <button class="btn primary" id="save-btn">Save Creation</button>
+          <button class="btn" id="instructions-btn">Download Instructions (PDF)</button>
+          <button class="btn ghost" id="export-btn">Export JSON</button>
+          <button class="btn ghost" id="import-btn">Import JSON</button>
+          <input type="file" id="import-file" accept="application/json" hidden />
+          <button class="btn danger" id="clear-btn">Clear All</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:10px;" id="save-status"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Three.js + OrbitControls (UMD/non-module builds from Cloudflare) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- jsPDF for instructions generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script src="/js/bricks.js"></script>
+  <script src="/js/user.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/instructions.js"></script>
+  <script src="/js/builder.js"></script>
+</body>
+</html>
