@@ -278,13 +278,13 @@
     const studX = Math.round(hp.x / STUD - w / 2);
     const studZ = Math.round(hp.z / STUD - d / 2);
 
-    // Determine Y based on whether we hit the baseplate or a brick top.
-    let yPlates;
-    if (hit.object === baseplate) {
-      yPlates = 0;
-    } else {
-      yPlates = highestTopUnderFootprint(occupancy(brick, state.rot, studX, studZ));
-    }
+    // Determine Y from the ENTIRE footprint at the current rotation, not just
+    // the cursor's hit. The cursor might be over the baseplate, but if any
+    // part of the brick's footprint overlaps a neighbor, the brick should sit
+    // on top of that neighbor rather than trying to rest at y=0 (which would
+    // collide). highestTopUnderFootprint already returns 0 when no cell has
+    // anything beneath it, so this collapses the old two-branch logic.
+    const yPlates = highestTopUnderFootprint(occupancy(brick, state.rot, studX, studZ));
 
     return { cellX: studX, cellZ: studZ, y: yPlates, hitBrickId };
   }
