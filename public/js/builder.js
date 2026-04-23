@@ -19,7 +19,7 @@
 (function () {
   const THREE = window.THREE;
   const { STUD, PLATE, COLORS, COLOR_MAP, BRICKS, BRICK_MAP, CATEGORIES,
-          buildBrickMesh, placeMesh, footprint, occupancy } = window.Bricks;
+          buildBrickMesh, placeMesh, footprint, occupancy, topAtCell } = window.Bricks;
 
   // -------- baseplate config --------
   const BASEPLATE_SIZE = 32; // in studs
@@ -177,11 +177,15 @@
     return result;
   }
 
-  // Highest plate-y occupied at a given stud cell (returns 0 if empty, meaning next brick sits at y=0)
+  // Highest plate-y occupied at a given stud cell. Slopes contribute a per-cell
+  // top height that matches the slanted surface, so pieces placed above the
+  // low end of a slope don't float at the high end's bounding-box top.
+  // Returns 0 (= baseplate) if nothing's there.
   function heightAtCell(cellX, cellZ) {
     let h = 0;
     for (const b of bricksAtCell(cellX, cellZ)) {
-      const top = b.y + BRICK_MAP[b.type].h;
+      const bb = BRICK_MAP[b.type];
+      const top = b.y + topAtCell(bb, b.rot, b.x, b.z, cellX, cellZ);
       if (top > h) h = top;
     }
     return h;
@@ -197,17 +201,28 @@
     return h;
   }
 
-  // True if any existing brick intersects the proposed placement.
-  function collides(cells, y, h, ignoreId = null) {
-    for (const b of state.bricks) {
-      if (ignoreId !== null && b.id === ignoreId) continue;
-      const bb = BRICK_MAP[b.type];
-      const { w, d } = footprint(bb, b.rot);
-      // vertical overlap: [b.y, b.y+bb.h) ∩ [y, y+h) ≠ ∅
-      const vOverlap = (b.y < y + h) && (b.y + bb.h > y);
-      if (!vOverlap) continue;
-      for (const [cx, cz] of cells) {
-        if (cx >= b.x && cx < b.x + w && cz >= b.z && cz < b.z + d) return true;
+  // True if the proposed placement intersects any existing brick.
+  //
+  // Per-cell vertical-interval check: at every cell the new brick covers, we
+  // compute the new top and every overlapping existing brick's top (both use
+  // topAtCell so slopes shrink the interval at their low-end cells). Two
+  // pieces collide at a cell only if their [y, top) intervals overlap. This
+  // lets you stack onto the low end of a slope without the slope's high-end
+  // bounding box counting as "occupied" at the low-end cells.
+  function collides(newBrick, newRot, nx, ny, nz, ignoreId = null) {
+    const { w: fpW, d: fpD } = footprint(newBrick, newRot);
+    for (let di = 0; di < fpW; di++) {
+      for (let dj = 0; dj < fpD; dj++) {
+        const cx = nx + di, cz = nz + dj;
+        const newTopHere = ny + topAtCell(newBrick, newRot, nx, nz, cx, cz);
+        for (const b of state.bricks) {
+          if (ignoreId !== null && b.id === ignoreId) continue;
+          const bb = BRICK_MAP[b.type];
+          const bF = footprint(bb, b.rot);
+          if (cx < b.x || cx >= b.x + bF.w || cz < b.z || cz >= b.z + bF.d) continue;
+          const bTop = b.y + topAtCell(bb, b.rot, b.x, b.z, cx, cz);
+          if (b.y < newTopHere && bTop > ny) return true;
+        }
       }
     }
     return false;
@@ -318,7 +333,7 @@
     const brick = BRICK_MAP[type];
     if (!brick) return null;
     const cells = occupancy(brick, rot, x, z);
-    if (!inBounds(cells) || collides(cells, y, brick.h)) return null;
+    if (!inBounds(cells) || collides(brick, rot, x, y, z)) return null;
     const id = nextId++;
     const record = { id, type, color, x, y, z, rot };
     state.bricks.push(record);
@@ -368,7 +383,7 @@
     const newZ = Math.round(cz - newF.d / 2);
     const newCells = occupancy(brick, newRot, newX, newZ);
     if (!inBounds(newCells)) return null;
-    if (collides(newCells, b.y, brick.h, id)) return null;
+    if (collides(brick, newRot, newX, b.y, newZ, id)) return null;
 
     const prev = { rot: b.rot, x: b.x, z: b.z };
     b.rot = newRot; b.x = newX; b.z = newZ;
@@ -392,7 +407,7 @@
     const newX = Math.round(cx - newF.w / 2);
     const newZ = Math.round(cz - newF.d / 2);
     const newCells = occupancy(brick, nextRot, newX, newZ);
-    if (!inBounds(newCells) || collides(newCells, b.y, brick.h, id)) {
+    if (!inBounds(newCells) || collides(brick, nextRot, newX, b.y, newZ, id)) {
       UI.toast('Can’t rotate — blocked or out of bounds', 'error');
       return;
     }
@@ -557,7 +572,7 @@
     if (!p) { ghostMesh.visible = false; return; }
     const brick = BRICK_MAP[state.selectedType];
     const cells = occupancy(brick, state.rot, p.cellX, p.cellZ);
-    const ok = inBounds(cells) && !collides(cells, p.y, brick.h);
+    const ok = inBounds(cells) && !collides(brick, state.rot, p.cellX, p.y, p.cellZ);
     ghostMesh.visible = true;
     placeMesh(ghostMesh, brick, p.cellX, p.y, p.cellZ, state.rot);
     ghostMesh.traverse(o => {
@@ -618,7 +633,7 @@
     // place
     const brick = BRICK_MAP[state.selectedType];
     const cells = occupancy(brick, state.rot, p.cellX, p.cellZ);
-    if (!inBounds(cells) || collides(cells, p.y, brick.h)) {
+    if (!inBounds(cells) || collides(brick, state.rot, p.cellX, p.y, p.cellZ)) {
       UI.toast('Can’t place there', 'error');
       return;
     }

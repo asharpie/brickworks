@@ -119,6 +119,35 @@
     return cells;
   }
 
+  // Height in plates (possibly fractional) of a piece's top surface at the
+  // given world stud cell (cx, cz). For flat-topped pieces this is just
+  // `brick.h`. For slopes, the surface varies across the footprint: full h
+  // at the "back" column and h*0.25 at the "front" column, with the surface
+  // sampled at each cell's center so stacking lands on the slope, not on
+  // the bounding-box top.
+  //
+  // Rotation mapping: the slope descends along the brick's LOCAL +x axis
+  // (local_i=0 is high / back, local_i=brick.w-1 is low / front). We invert
+  // the placeMesh rotation to recover local_i from a world cell offset.
+  function topAtCell(brick, rot, bx, bz, cx, cz) {
+    if (brick.kind !== 'slope') return brick.h;
+    const r = ((rot % 4) + 4) % 4;
+    const dx = cx - bx;
+    const dz = cz - bz;
+    let i;
+    switch (r) {
+      case 0: i = dx;                 break;
+      case 1: i = dz;                 break;
+      case 2: i = brick.w - 1 - dx;   break;
+      default: i = brick.w - 1 - dz;  break; // r === 3
+    }
+    // Clamp just in case caller queries a cell outside the footprint.
+    if (i < 0) i = 0;
+    if (i > brick.w - 1) i = brick.w - 1;
+    // Surface height in plates at column i (0 = high, w-1 = low).
+    return brick.h * (1 - 0.75 * (i + 0.5) / brick.w);
+  }
+
   // Core bounding-box geometry helper — shared by bricks, plates, technic, tiles.
   function makeBoxGeometry(w, d, hPlates, { tile = false, slope = false, round = false, technic = false } = {}) {
     const THREE = global.THREE;
@@ -286,7 +315,7 @@
     STUD, PLATE, units,
     COLORS, COLOR_MAP, CATEGORIES,
     BRICKS, BRICK_MAP,
-    footprint, occupancy,
+    footprint, occupancy, topAtCell,
     buildBrickMesh, placeMesh,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
