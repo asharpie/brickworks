@@ -208,27 +208,55 @@
     // Add studs on top.
     if (brick.studsTop) {
       const studGeom = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT, 20);
-      for (let i = 0; i < brick.w; i++) {
-        for (let j = 0; j < brick.d; j++) {
-          // Slopes: only the rear row has studs.
-          if (brick.kind === 'slope' && j !== brick.d - 1) continue;
-          // Round: place a centered stud instead of a grid.
-          if (brick.kind === 'round') continue;
-          const stud = new THREE.Mesh(studGeom, mat);
-          stud.position.set(
-            -width / 2 + STUD * (i + 0.5),
-            height / 2 + STUD_HEIGHT / 2,
-            -depth / 2 + STUD * (j + 0.5)
-          );
-          stud.castShadow = true;
-          group.add(stud);
+
+      if (brick.kind === 'slope') {
+        // Slopes: studs sit on the slanted surface, tilted so their axis
+        // matches the surface normal, and one stud per footprint cell.
+        // Slope descends from local x = -width/2 (high / back) to +width/2 (low / front).
+        const rise = height * 0.75;               // vertical drop along the ramp
+        const run = width;                        // horizontal length of the ramp
+        const slopeAngle = Math.atan2(rise, run); // angle between ramp and floor
+        const nx = Math.sin(slopeAngle);          // surface normal x component
+        const ny = Math.cos(slopeAngle);          // surface normal y component
+        for (let i = 0; i < brick.w; i++) {
+          for (let j = 0; j < brick.d; j++) {
+            const xAlongWidth = STUD * (i + 0.5);                       // from left (high) edge
+            const surfYFromBottom = height - (xAlongWidth / width) * rise;
+            const localX = -width / 2 + xAlongWidth;
+            const localY = surfYFromBottom - height / 2;                // center-origin coords
+            const localZ = -depth / 2 + STUD * (j + 0.5);
+            const stud = new THREE.Mesh(studGeom, mat);
+            stud.position.set(
+              localX + nx * (STUD_HEIGHT / 2),
+              localY + ny * (STUD_HEIGHT / 2),
+              localZ
+            );
+            // Rotate around Z so the stud's Y axis aligns with the surface normal.
+            stud.rotation.z = -slopeAngle;
+            stud.castShadow = true;
+            group.add(stud);
+          }
         }
-      }
-      if (brick.kind === 'round') {
+      } else if (brick.kind === 'round') {
+        // Round: single centered stud.
         const stud = new THREE.Mesh(studGeom, mat);
         stud.position.set(0, height / 2 + STUD_HEIGHT / 2, 0);
         stud.castShadow = true;
         group.add(stud);
+      } else {
+        // Regular flat-topped pieces: grid of vertical studs.
+        for (let i = 0; i < brick.w; i++) {
+          for (let j = 0; j < brick.d; j++) {
+            const stud = new THREE.Mesh(studGeom, mat);
+            stud.position.set(
+              -width / 2 + STUD * (i + 0.5),
+              height / 2 + STUD_HEIGHT / 2,
+              -depth / 2 + STUD * (j + 0.5)
+            );
+            stud.castShadow = true;
+            group.add(stud);
+          }
+        }
       }
     }
 
