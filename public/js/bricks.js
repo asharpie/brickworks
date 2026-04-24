@@ -294,18 +294,65 @@
     return group;
   }
 
+  // Slope angle (radians) between the slanted face and the ground plane.
+  // Fixed by the geometry: rise = h*PLATE*0.75, run = w*STUD.
+  function slopeAngleRad(brick) {
+    if (!brick || brick.kind !== 'slope') return 0;
+    const rise = brick.h * PLATE * 0.75;
+    const run = brick.w * STUD;
+    return Math.atan2(rise, run);
+  }
+
   // Position a mesh group at stud-grid coordinates.
   //
   // (x, z) is the lowest-index corner of the footprint after rotation.
-  // y is in plates (0 is baseplate top).
-  function placeMesh(mesh, brick, x, y, z, rot = 0) {
+  // y is in plates (0 is baseplate top). Typically y is the piece's flat
+  // bottom; when `tilt` is supplied, y is the AVERAGE slope-surface height
+  // across the footprint, so the piece sits on the slope at its midpoint.
+  //
+  // `tilt`, if set, is `{ axis: 'x' | 'z', angle: radians }` — a world-axis
+  // rotation applied AFTER the usual Y (rot) rotation. Used to lay a flat
+  // piece on a slope surface so its bottom follows the slope instead of
+  // floating at the high end.
+  function placeMesh(mesh, brick, x, y, z, rot = 0, tilt = null) {
+    const THREE = global.THREE;
     const { w, d } = footprint(brick, rot);
+    const half_h = (brick.h * PLATE) / 2;
+    const tiltAngle = tilt ? tilt.angle : 0;
+    const cosT = Math.cos(tiltAngle);
+    const sinT = Math.sin(tiltAngle);
+
+    // When tilted around a horizontal axis through the mesh center, the
+    // bottom-center drifts horizontally. Offset the mesh position so the
+    // bottom stays centered on the footprint's horizontal midpoint.
+    let offX = 0, offZ = 0;
+    if (tilt) {
+      if (tilt.axis === 'z')      offX = -half_h * sinT;
+      else if (tilt.axis === 'x') offZ =  half_h * sinT;
+    }
+
     mesh.position.set(
-      (x + w / 2) * STUD,
-      y * PLATE + (brick.h * PLATE) / 2,
-      (z + d / 2) * STUD
+      (x + w / 2) * STUD + offX,
+      y * PLATE + half_h * cosT,
+      (z + d / 2) * STUD + offZ
     );
-    mesh.rotation.y = -(rot * Math.PI) / 2;
+
+    // Compose rotation: first the local Y spin from `rot`, then a world-axis
+    // tilt (if any). Quaternion multiplication applies right-to-left, so
+    // q = qTilt * qY applies qY first.
+    const qY = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      -(rot * Math.PI) / 2
+    );
+    const q = new THREE.Quaternion();
+    if (tilt) {
+      const axisVec = tilt.axis === 'x'
+        ? new THREE.Vector3(1, 0, 0)
+        : new THREE.Vector3(0, 0, 1);
+      q.setFromAxisAngle(axisVec, tilt.angle);
+    }
+    q.multiply(qY);
+    mesh.quaternion.copy(q);
   }
 
   // World-units helpers, exposed for other modules.
@@ -315,7 +362,7 @@
     STUD, PLATE, units,
     COLORS, COLOR_MAP, CATEGORIES,
     BRICKS, BRICK_MAP,
-    footprint, occupancy, topAtCell,
+    footprint, occupancy, topAtCell, slopeAngleRad,
     buildBrickMesh, placeMesh,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

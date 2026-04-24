@@ -19,7 +19,8 @@
 (function () {
   const THREE = window.THREE;
   const { STUD, PLATE, COLORS, COLOR_MAP, BRICKS, BRICK_MAP, CATEGORIES,
-          buildBrickMesh, placeMesh, footprint, occupancy, topAtCell } = window.Bricks;
+          buildBrickMesh, placeMesh, footprint, occupancy, topAtCell,
+          slopeAngleRad } = window.Bricks;
 
   // -------- baseplate config --------
   const BASEPLATE_SIZE = 32; // in studs
@@ -201,6 +202,51 @@
     return h;
   }
 
+  // Figure out whether a to-be-placed piece should tilt to match a slope
+  // beneath it. Returns { axis, angle, slope } if the ENTIRE footprint sits
+  // on a single slope brick's top surface, otherwise null. Slope pieces
+  // themselves never tilt (stacking slopes on slopes is out of scope here).
+  //
+  // The axis/angle mapping (derived by following how the slope's local +x
+  // descent direction is rotated into world space):
+  //    slope.rot 0 → tilt axis Z, angle -slopeAngle
+  //    slope.rot 1 → tilt axis X, angle +slopeAngle
+  //    slope.rot 2 → tilt axis Z, angle +slopeAngle
+  //    slope.rot 3 → tilt axis X, angle -slopeAngle
+  function computeSlopeTilt(brick, rot, x, z, ignoreId = null) {
+    if (!brick || brick.kind === 'slope') return null;
+    const { w, d } = footprint(brick, rot);
+    let slopeUnder = null;
+    for (let di = 0; di < w; di++) {
+      for (let dj = 0; dj < d; dj++) {
+        const cx = x + di, cz = z + dj;
+        let topB = null, topH = -Infinity;
+        for (const b of state.bricks) {
+          if (ignoreId !== null && b.id === ignoreId) continue;
+          const bb = BRICK_MAP[b.type];
+          const bF = footprint(bb, b.rot);
+          if (cx < b.x || cx >= b.x + bF.w || cz < b.z || cz >= b.z + bF.d) continue;
+          const bTop = b.y + topAtCell(bb, b.rot, b.x, b.z, cx, cz);
+          if (bTop > topH) { topB = b; topH = bTop; }
+        }
+        if (!topB) return null;
+        if (BRICK_MAP[topB.type].kind !== 'slope') return null;
+        if (slopeUnder === null) slopeUnder = topB;
+        else if (slopeUnder.id !== topB.id) return null;
+      }
+    }
+    if (!slopeUnder) return null;
+    const slope = BRICK_MAP[slopeUnder.type];
+    const angle = slopeAngleRad(slope);
+    const r = ((slopeUnder.rot % 4) + 4) % 4;
+    switch (r) {
+      case 0: return { axis: 'z', angle: -angle, slope: slopeUnder };
+      case 1: return { axis: 'x', angle:  angle, slope: slopeUnder };
+      case 2: return { axis: 'z', angle:  angle, slope: slopeUnder };
+      default: return { axis: 'x', angle: -angle, slope: slopeUnder }; // r === 3
+    }
+  }
+
   // True if the proposed placement intersects any existing brick.
   //
   // Per-cell vertical-interval check: at every cell the new brick covers, we
@@ -209,19 +255,36 @@
   // pieces collide at a cell only if their [y, top) intervals overlap. This
   // lets you stack onto the low end of a slope without the slope's high-end
   // bounding box counting as "occupied" at the low-end cells.
-  function collides(newBrick, newRot, nx, ny, nz, ignoreId = null) {
+  //
+  // When `tilt` is supplied, the new piece is tilted to match a slope below
+  // (tilt.slope). In that case the new piece's BOTTOM at each cell follows
+  // the slope's top surface — so a flat plate on a 2x1 slope occupies the
+  // exact interval above the slope's surface rather than a flat band. The
+  // slope brick itself is excluded from collision checks (we are sitting on
+  // it, not colliding with it).
+  function collides(newBrick, newRot, nx, ny, nz, ignoreId = null, tilt = null) {
     const { w: fpW, d: fpD } = footprint(newBrick, newRot);
+    const slopeUnder = tilt ? tilt.slope : null;
+    const slopeDef = slopeUnder ? BRICK_MAP[slopeUnder.type] : null;
     for (let di = 0; di < fpW; di++) {
       for (let dj = 0; dj < fpD; dj++) {
         const cx = nx + di, cz = nz + dj;
-        const newTopHere = ny + topAtCell(newBrick, newRot, nx, nz, cx, cz);
+        let newBottom, newTopHere;
+        if (slopeUnder) {
+          newBottom = slopeUnder.y + topAtCell(slopeDef, slopeUnder.rot, slopeUnder.x, slopeUnder.z, cx, cz);
+          newTopHere = newBottom + newBrick.h;
+        } else {
+          newBottom = ny;
+          newTopHere = ny + topAtCell(newBrick, newRot, nx, nz, cx, cz);
+        }
         for (const b of state.bricks) {
           if (ignoreId !== null && b.id === ignoreId) continue;
+          if (slopeUnder && b.id === slopeUnder.id) continue;
           const bb = BRICK_MAP[b.type];
           const bF = footprint(bb, b.rot);
           if (cx < b.x || cx >= b.x + bF.w || cz < b.z || cz >= b.z + bF.d) continue;
           const bTop = b.y + topAtCell(bb, b.rot, b.x, b.z, cx, cz);
-          if (b.y < newTopHere && bTop > ny) return true;
+          if (b.y < newTopHere && bTop > newBottom) return true;
         }
       }
     }
@@ -299,9 +362,23 @@
     // on top of that neighbor rather than trying to rest at y=0 (which would
     // collide). highestTopUnderFootprint already returns 0 when no cell has
     // anything beneath it, so this collapses the old two-branch logic.
-    const yPlates = highestTopUnderFootprint(occupancy(brick, state.rot, studX, studZ));
+    //
+    // If the footprint sits entirely on a slope, y becomes the AVERAGE top
+    // across the footprint — combined with the tilt applied by placeMesh,
+    // this makes the piece's tilted bottom match the slope's slanted top
+    // (instead of hovering at the high end of the slope as a flat piece).
+    const cells = occupancy(brick, state.rot, studX, studZ);
+    const tilt = computeSlopeTilt(brick, state.rot, studX, studZ);
+    let yPlates;
+    if (tilt) {
+      let sum = 0;
+      for (const [cx, cz] of cells) sum += heightAtCell(cx, cz);
+      yPlates = sum / cells.length;
+    } else {
+      yPlates = highestTopUnderFootprint(cells);
+    }
 
-    return { cellX: studX, cellZ: studZ, y: yPlates, hitBrickId };
+    return { cellX: studX, cellZ: studZ, y: yPlates, tilt, hitBrickId };
   }
 
   // -------- action history --------
@@ -333,13 +410,14 @@
     const brick = BRICK_MAP[type];
     if (!brick) return null;
     const cells = occupancy(brick, rot, x, z);
-    if (!inBounds(cells) || collides(brick, rot, x, y, z)) return null;
+    const tilt = computeSlopeTilt(brick, rot, x, z);
+    if (!inBounds(cells) || collides(brick, rot, x, y, z, null, tilt)) return null;
     const id = nextId++;
     const record = { id, type, color, x, y, z, rot };
     state.bricks.push(record);
 
     const mesh = buildBrickMesh(brick, color);
-    placeMesh(mesh, brick, x, y, z, rot);
+    placeMesh(mesh, brick, x, y, z, rot, tilt);
     mesh.traverse(o => {
       o.userData.brickId = id;
       if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
@@ -383,12 +461,13 @@
     const newZ = Math.round(cz - newF.d / 2);
     const newCells = occupancy(brick, newRot, newX, newZ);
     if (!inBounds(newCells)) return null;
-    if (collides(brick, newRot, newX, b.y, newZ, id)) return null;
+    const tilt = computeSlopeTilt(brick, newRot, newX, newZ, id);
+    if (collides(brick, newRot, newX, b.y, newZ, id, tilt)) return null;
 
     const prev = { rot: b.rot, x: b.x, z: b.z };
     b.rot = newRot; b.x = newX; b.z = newZ;
     const mesh = meshIndex.get(id);
-    if (mesh) placeMesh(mesh, brick, newX, b.y, newZ, newRot);
+    if (mesh) placeMesh(mesh, brick, newX, b.y, newZ, newRot, tilt);
     return prev;
   }
 
@@ -407,7 +486,8 @@
     const newX = Math.round(cx - newF.w / 2);
     const newZ = Math.round(cz - newF.d / 2);
     const newCells = occupancy(brick, nextRot, newX, newZ);
-    if (!inBounds(newCells) || collides(brick, nextRot, newX, b.y, newZ, id)) {
+    const nextTilt = computeSlopeTilt(brick, nextRot, newX, newZ, id);
+    if (!inBounds(newCells) || collides(brick, nextRot, newX, b.y, newZ, id, nextTilt)) {
       UI.toast('Can’t rotate — blocked or out of bounds', 'error');
       return;
     }
@@ -426,8 +506,9 @@
     if (!b) return;
     const brick = BRICK_MAP[b.type];
     b.rot = target.rot; b.x = target.x; b.z = target.z;
+    const tilt = computeSlopeTilt(brick, b.rot, b.x, b.z, id);
     const mesh = meshIndex.get(id);
-    if (mesh) placeMesh(mesh, brick, b.x, b.y, b.z, b.rot);
+    if (mesh) placeMesh(mesh, brick, b.x, b.y, b.z, b.rot, tilt);
   }
 
   function paintBrick(id, color) {
@@ -572,9 +653,9 @@
     if (!p) { ghostMesh.visible = false; return; }
     const brick = BRICK_MAP[state.selectedType];
     const cells = occupancy(brick, state.rot, p.cellX, p.cellZ);
-    const ok = inBounds(cells) && !collides(brick, state.rot, p.cellX, p.y, p.cellZ);
+    const ok = inBounds(cells) && !collides(brick, state.rot, p.cellX, p.y, p.cellZ, null, p.tilt);
     ghostMesh.visible = true;
-    placeMesh(ghostMesh, brick, p.cellX, p.y, p.cellZ, state.rot);
+    placeMesh(ghostMesh, brick, p.cellX, p.y, p.cellZ, state.rot, p.tilt);
     ghostMesh.traverse(o => {
       if (o.material && o.material.color) {
         o.material.color.set(ok
@@ -633,7 +714,7 @@
     // place
     const brick = BRICK_MAP[state.selectedType];
     const cells = occupancy(brick, state.rot, p.cellX, p.cellZ);
-    if (!inBounds(cells) || collides(brick, state.rot, p.cellX, p.y, p.cellZ)) {
+    if (!inBounds(cells) || collides(brick, state.rot, p.cellX, p.y, p.cellZ, null, p.tilt)) {
       UI.toast('Can’t place there', 'error');
       return;
     }
